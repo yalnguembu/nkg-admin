@@ -1,0 +1,754 @@
+// This is your Prisma schema file
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum CustomerType {
+  B2C
+  B2B
+  PARTICULIER
+  AGENT_COMMERCIAL
+  REVENDEUR
+}
+
+enum AddressType {
+  BILLING
+  SHIPPING
+}
+
+enum OrderStatus {
+  DRAFT
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  AWAITING_PAYMENT
+  PAID
+  PREPARING
+  READY_FOR_PICKUP
+  SHIPPED
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum OrderType {
+  SALE_ONLY
+  INSTALLATION_ONLY
+  SALE_AND_INSTALLATION
+}
+
+enum QuoteStatus {
+  DRAFT
+  PENDING
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum MovementType {
+  IN
+  OUT
+  ADJUSTMENT
+  RESERVATION
+  RELEASE
+  RETURN
+  SALE // Added
+  PURCHASE // Added
+  ADJUSTMENT_IN // Added
+  ADJUSTMENT_OUT // Added
+}
+
+enum ReferenceType {
+  ORDER
+  PURCHASE
+  INVENTORY
+  RETURN
+  SUPPLIER // Added
+  MANUAL_ADJUSTMENT // Added
+  RESERVATION // Added
+}
+
+enum DocumentType {
+  TECHNICAL_SHEET
+  MANUAL
+  CERTIFICATE
+}
+
+enum ServiceType {
+  ELECTRICAL
+  SECURITY
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+}
+
+enum PriceType {
+  BASE
+  WHOLESALE
+  PROMO
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  REFUNDED
+  FAILED
+}
+
+enum PaymentMethod {
+  CASH
+  MOBILE_MONEY
+  BANK_TRANSFER
+  CARD
+  ON_DELIVERY
+}
+
+enum DeliveryMethod {
+  PICKUP
+  HOME_DELIVERY
+  DROPSHIP
+}
+
+// ============================================
+// MODULE 1: CATALOGUE
+// ============================================
+
+model Category {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(255)
+  slug        String   @unique @db.VarChar(255)
+  parentId    String?  @db.Uuid
+  description String?  @db.Text
+  imageUrl    String?  @db.Text
+  orderIndex  Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children Category[] @relation("CategoryHierarchy")
+  products Product[]
+
+  @@index([slug])
+  @@index([parentId])
+  @@index([isActive])
+  @@map("categories")
+}
+
+model Brand {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(255)
+  slug      String   @unique @db.VarChar(255)
+  logoUrl   String?  @db.Text
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  models   Model[]
+  products Product[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@map("brands")
+}
+
+model Service {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(255)
+  slug        String   @unique @db.VarChar(255)
+  description String?  @db.Text
+  imageUrl    String?  @db.Text
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@map("services")
+}
+
+model Model {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(255)
+  slug      String   @unique @db.VarChar(255)
+  brandId   String   @db.Uuid
+  reference String?  @db.VarChar(100) // Added for compatibility
+  year      Int? // Added for compatibility
+  imageUrl  String?  @db.Text
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  brand    Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@index([slug])
+  @@index([brandId])
+  @@index([isActive])
+  @@map("models")
+}
+
+model Product {
+  id                   String   @id @default(uuid()) @db.Uuid
+  name                 String   @db.VarChar(255)
+  slug                 String   @unique @db.VarChar(255)
+  sku                  String   @unique @db.VarChar(100)
+  description          String?  @db.Text
+  technicalSpecs       Json?    @db.JsonB
+  categoryId           String   @db.Uuid
+  brandId              String?  @db.Uuid
+  modelId              String?  @db.Uuid
+  isActive             Boolean  @default(true)
+  requiresInstallation Boolean  @default(false)
+  isDropshipping       Boolean  @default(false)
+  dropshipSupplierId   String?  @db.Uuid
+  metaTitle            String?  @db.VarChar(255)
+  metaDescription      String?  @db.Text
+  createdAt            DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime @updatedAt @db.Timestamptz(6)
+
+  category         Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  brand            Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  model            Model?            @relation(fields: [modelId], references: [id], onDelete: SetNull)
+  dropshipSupplier Supplier?         @relation(fields: [dropshipSupplierId], references: [id], onDelete: SetNull)
+  variants         ProductVariant[]
+  images           ProductImage[]
+  documents        ProductDocument[]
+  supplierProducts SupplierProduct[]
+
+  @@index([slug])
+  @@index([sku])
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([modelId])
+  @@index([isActive])
+  @@index([isDropshipping])
+  @@map("products")
+}
+
+model ProductVariant {
+  id         String   @id @default(uuid()) @db.Uuid
+  productId  String   @db.Uuid
+  sku        String   @unique @db.VarChar(100)
+  name       String?  @db.VarChar(255)
+  attributes Json?    @db.JsonB
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+  product        Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  prices         Price[]
+  priceHistory   PriceHistory[]
+  stock          Stock?
+  stockMovements StockMovement[]
+  orderItems     OrderItem[]
+  cartItems      CartItem[]
+
+  @@index([sku])
+  @@index([productId])
+  @@index([isActive])
+  @@map("product_variants")
+}
+
+model ProductImage {
+  id         String   @id @default(uuid()) @db.Uuid
+  productId  String   @db.Uuid
+  imageUrl   String   @db.Text
+  altText    String?  @db.VarChar(255)
+  orderIndex Int      @default(0)
+  isPrimary  Boolean  @default(false)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([isPrimary])
+  @@map("product_images")
+}
+
+model ProductDocument {
+  id           String       @id @default(uuid()) @db.Uuid
+  productId    String       @db.Uuid
+  documentUrl  String       @db.Text
+  documentType DocumentType
+  name         String       @db.VarChar(255)
+  createdAt    DateTime     @default(now()) @db.Timestamptz(6)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([documentType])
+  @@map("product_documents")
+}
+
+model Price {
+  id           String       @id @default(uuid()) @db.Uuid
+  variantId    String       @db.Uuid
+  priceType    PriceType    @default(BASE)
+  customerType CustomerType
+  amount       Decimal      @db.Decimal(10, 2)
+  currency     String       @default("XAF") @db.VarChar(3)
+  validFrom    DateTime     @default(now()) @db.Timestamptz(6)
+  validTo      DateTime?    @db.Timestamptz(6)
+  minQuantity  Int          @default(1)
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @db.Timestamptz(6)
+
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([variantId, priceType, customerType, validFrom, minQuantity])
+  @@index([variantId])
+  @@index([priceType])
+  @@index([customerType])
+  @@index([validFrom, validTo])
+  @@index([isActive])
+  @@map("prices")
+}
+
+model PriceHistory {
+  id           String       @id @default(uuid()) @db.Uuid
+  variantId    String       @db.Uuid
+  priceType    PriceType
+  customerType CustomerType
+  oldAmount    Decimal?     @db.Decimal(10, 2)
+  newAmount    Decimal      @db.Decimal(10, 2)
+  minQuantity  Int          @default(1)
+  changedBy    String?      @db.Uuid
+  changeReason String?      @db.Text
+  createdAt    DateTime     @default(now()) @db.Timestamptz(6)
+
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  adminUser AdminUser?     @relation(fields: [changedBy], references: [id], onDelete: SetNull)
+
+  @@index([variantId])
+  @@index([changedBy])
+  @@index([createdAt])
+  @@map("price_history")
+}
+
+model SupplierProduct {
+  supplierId   String   @id @db.Uuid
+  productId    String   @db.Uuid
+  supplierSku  String?  @db.VarChar(100)
+  costPrice    Decimal? @db.Decimal(10, 2)
+  leadTimeDays Int?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId])
+  @@index([productId])
+  @@map("supplier_products")
+}
+
+model Supplier {
+  id                String   @id @default(uuid()) @db.Uuid
+  name              String   @db.VarChar(255)
+  contactName       String?  @db.VarChar(255)
+  email             String?  @db.VarChar(255)
+  phone             String?  @db.VarChar(50)
+  address           String?  @db.Text
+  deliveryDelayDays Int?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(6)
+
+  products         Product[]
+  stockMovements   StockMovement[]
+  supplierProducts SupplierProduct[]
+
+  @@index([isActive])
+  @@map("suppliers")
+}
+
+// ============================================
+// MODULE 2: GESTION STOCK
+// ============================================
+
+model Stock {
+  id               String   @id @default(uuid()) @db.Uuid
+  variantId        String   @unique @db.Uuid
+  quantity         Int      @default(0)
+  reservedQuantity Int      @default(0)
+  alertThreshold   Int      @default(5)
+  version          Int      @default(0)
+  createdAt        DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(6)
+
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@index([variantId])
+  @@index([quantity])
+  @@map("stock")
+}
+
+model StockMovement {
+  id            String         @id @default(uuid()) @db.Uuid
+  variantId     String         @db.Uuid
+  movementType  MovementType
+  quantity      Int
+  reason        String?        @db.Text
+  referenceType ReferenceType?
+  referenceId   String?        @db.Uuid
+  supplierId    String?        @db.Uuid
+  performedBy   String?        @db.Uuid
+  createdAt     DateTime       @default(now()) @db.Timestamptz(6)
+
+  variant    ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  supplier   Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  adminUser  AdminUser?     @relation(fields: [performedBy], references: [id], onDelete: SetNull, map: "stock_movements_admin_user_fkey")
+  customer   Customer?      @relation(fields: [customerId], references: [id])
+  customerId String?        @db.Uuid
+
+  @@index([variantId])
+  @@index([movementType])
+  @@index([referenceType, referenceId])
+  @@index([supplierId])
+  @@index([performedBy])
+  @@index([createdAt])
+  @@map("stock_movements")
+}
+
+// ============================================
+// MODULE 3: GESTION CLIENTS
+// ============================================
+
+model Customer {
+  id           String       @id @db.Uuid
+  customerType CustomerType @default(B2C)
+  email        String?      @unique @db.VarChar(255)
+  firstName    String?      @db.VarChar(255)
+  lastName     String?      @db.VarChar(255)
+  companyName  String?      @db.VarChar(255)
+  taxId        String?      @db.VarChar(100)
+  phone        String?      @db.VarChar(50)
+  totalSpent   Decimal      @default(0) @db.Decimal(10, 2)
+  orderCount   Int          @default(0)
+  createdAt    DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @db.Timestamptz(6)
+
+  addresses      Address[]
+  orders         Order[]
+  carts          Cart[]
+  stockMovements StockMovement[]
+
+  @@index([customerType])
+  @@index([email])
+  @@index([phone])
+  @@map("customers")
+}
+
+model Address {
+  id           String      @id @default(uuid()) @db.Uuid
+  customerId   String      @db.Uuid
+  addressType  AddressType
+  fullName     String      @db.VarChar(255)
+  phone        String?     @db.VarChar(50)
+  addressLine1 String      @db.VarChar(255)
+  addressLine2 String?     @db.VarChar(255)
+  city         String      @db.VarChar(100)
+  region       String?     @db.VarChar(100)
+  postalCode   String?     @db.VarChar(20)
+  country      String      @default("CM") @db.VarChar(2)
+  isDefault    Boolean     @default(false)
+  createdAt    DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime    @updatedAt @db.Timestamptz(6)
+
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  ordersBilling  Order[]  @relation("BillingAddress")
+  ordersShipping Order[]  @relation("ShippingAddress")
+
+  @@index([customerId])
+  @@index([addressType])
+  @@index([isDefault])
+  @@map("addresses")
+}
+
+// ============================================
+// MODULE 4: CART
+// ============================================
+
+model Cart {
+  id         String   @id @default(uuid()) @db.Uuid
+  customerId String?  @db.Uuid
+  sessionId  String?  @db.VarChar(255)
+  expiresAt  DateTime @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+  customer Customer?  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items    CartItem[]
+
+  @@index([customerId])
+  @@index([sessionId])
+  @@index([expiresAt])
+  @@map("carts")
+}
+
+model CartItem {
+  id        String   @id @default(uuid()) @db.Uuid
+  cartId    String   @db.Uuid
+  variantId String?  @db.Uuid
+  serviceId String?  @db.Uuid
+  quantity  Int
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  cart    Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  service Service?        @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  @@unique([cartId, variantId, serviceId])
+  @@index([cartId])
+  @@index([variantId])
+  @@index([serviceId])
+  @@map("cart_items")
+}
+
+// ============================================
+// MODULE 5: COMMANDES & DEVIS
+// ============================================
+
+model Order {
+  id                      String          @id @default(uuid()) @db.Uuid
+  orderNumber             String          @unique @db.VarChar(50)
+  customerId              String          @db.Uuid
+  status                  OrderStatus     @default(DRAFT)
+  orderType               OrderType
+  billingAddressId        String?         @db.Uuid
+  shippingAddressId       String?         @db.Uuid
+  subtotal                Decimal         @db.Decimal(10, 2)
+  installationCost        Decimal         @default(0) @db.Decimal(10, 2)
+  deliveryCost            Decimal         @default(0) @db.Decimal(10, 2)
+  discount                Decimal         @default(0) @db.Decimal(10, 2)
+  totalAmount             Decimal         @db.Decimal(10, 2)
+  deliveryMethod          DeliveryMethod?
+  requiresInstallation    Boolean         @default(false)
+  installationScheduledAt DateTime?       @db.Timestamptz(6)
+  notes                   String?         @db.Text
+  customerNotes           String?         @db.Text
+  whatsappUrl             String?         @db.Text
+  createdAt               DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime        @updatedAt @db.Timestamptz(6)
+  confirmedAt             DateTime?       @db.Timestamptz(6)
+  completedAt             DateTime?       @db.Timestamptz(6)
+
+  customer        Customer    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  billingAddress  Address?    @relation("BillingAddress", fields: [billingAddressId], references: [id], onDelete: SetNull)
+  shippingAddress Address?    @relation("ShippingAddress", fields: [shippingAddressId], references: [id], onDelete: SetNull)
+  items           OrderItem[]
+  quote           Quote?
+  payments        Payment[]
+
+  @@index([orderNumber])
+  @@index([customerId])
+  @@index([status])
+  @@index([orderType])
+  @@index([deliveryMethod])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id             String   @id @default(uuid()) @db.Uuid
+  orderId        String   @db.Uuid
+  variantId      String?  @db.Uuid
+  serviceId      String?  @db.Uuid
+  productName    String   @db.VarChar(255)
+  variantName    String?  @db.VarChar(255)
+  sku            String   @db.VarChar(100)
+  unitPrice      Decimal  @db.Decimal(10, 2)
+  quantity       Int
+  totalPrice     Decimal  @db.Decimal(10, 2)
+  isDropshipping Boolean  @default(false)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+
+  order   Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  service Service?        @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([variantId])
+  @@index([serviceId])
+  @@map("order_items")
+}
+
+model Quote {
+  id                         String      @id @default(uuid()) @db.Uuid
+  quoteNumber                String      @unique @db.VarChar(50)
+  orderId                    String      @unique @db.Uuid
+  installationConfig         Json?       @db.JsonB
+  calculatedInstallationCost Decimal     @db.Decimal(10, 2)
+  validUntil                 DateTime    @db.Timestamptz(6)
+  status                     QuoteStatus @default(PENDING)
+  acceptedAt                 DateTime?   @db.Timestamptz(6)
+  pdfUrl                     String?     @db.Text
+  whatsappUrl                String?     @db.Text
+  createdAt                  DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt                  DateTime    @updatedAt @db.Timestamptz(6)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([quoteNumber])
+  @@index([orderId])
+  @@index([status])
+  @@index([validUntil])
+  @@map("quotes")
+}
+
+model Payment {
+  id            String        @id @default(uuid()) @db.Uuid
+  orderId       String        @db.Uuid
+  amount        Decimal       @db.Decimal(10, 2)
+  method        PaymentMethod
+  status        PaymentStatus @default(PENDING)
+  transactionId String?       @db.VarChar(255)
+  reference     String?       @db.VarChar(255)
+  notes         String?       @db.Text
+  paidAt        DateTime?     @db.Timestamptz(6)
+  createdAt     DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime      @updatedAt @db.Timestamptz(6)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([status])
+  @@index([method])
+  @@index([transactionId])
+  @@map("payments")
+}
+
+model InstallationPricing {
+  id              String      @id @default(uuid()) @db.Uuid
+  serviceType     ServiceType
+  pricingRules    Json        @db.JsonB
+  hourlyRate      Decimal     @db.Decimal(10, 2)
+  travelCostPerKm Decimal     @db.Decimal(10, 2)
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime    @updatedAt @db.Timestamptz(6)
+
+  @@index([serviceType])
+  @@index([isActive])
+  @@map("installation_pricing")
+}
+
+// ============================================
+// MODULE 6: BACK-OFFICE ADMIN
+// ============================================
+
+model AdminUser {
+  id             String              @id @default(uuid()) @db.Uuid
+  email          String              @unique @db.VarChar(255)
+  password       String              @db.VarChar(255)
+  firstName      String?             @db.VarChar(100)
+  lastName       String?             @db.VarChar(100)
+  role           AdminRole           @default(ADMIN)
+  permissions    Json?               @db.JsonB
+  isActive       Boolean             @default(true)
+  createdAt      DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime            @updatedAt @db.Timestamptz(6)
+  activityLogs   ActivityLog[]
+  configurations SiteConfiguration[]
+  priceHistories PriceHistory[]
+  stockMovements StockMovement[]
+}
+
+model SiteConfiguration {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @unique @db.VarChar(255)
+  value     Json     @db.JsonB
+  category  String   @db.VarChar(100)
+  updatedBy String   @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  updater AdminUser @relation(fields: [updatedBy], references: [id], onDelete: Restrict)
+
+  @@index([key])
+  @@index([category])
+  @@map("site_configurations")
+}
+
+model SystemConfig {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique @db.VarChar(100)
+  value       String   @db.Text
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([key])
+  @@map("system_config")
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  action     String   @db.VarChar(255)
+  entityType String   @db.VarChar(100)
+  entityId   String?  @db.Uuid
+  details    Json?    @db.JsonB
+  ipAddress  String?  @db.VarChar(45)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  user AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+model Folder {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(255)
+  parentId  String?  @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  parent   Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children Folder[] @relation("FolderHierarchy")
+  files    File[]
+
+  @@index([parentId])
+  @@map("folders")
+}
+
+model File {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(255)
+  url       String   @db.Text
+  size      Int
+  mimeType  String   @db.VarChar(100)
+  folderId  String?  @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  folder Folder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  @@index([folderId])
+  @@map("files")
+}
