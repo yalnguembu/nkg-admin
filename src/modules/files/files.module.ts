@@ -2,16 +2,18 @@ import { Module } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
-import { FilesController } from './files.controller';
+import { FilesController, StaticFilesController } from './files.controller';
 import { FilesService } from './files.service';
 import { PrismaModule } from '../../database/prisma.module';
+
+import { UPLOAD_DIR } from '../../config/storage.config';
 
 @Module({
   imports: [
     PrismaModule,
     MulterModule.register({
       storage: diskStorage({
-        destination: './uploads',
+        destination: UPLOAD_DIR,
         filename: (req, file, cb) => {
           const randomName = Array(32)
             .fill(null)
@@ -22,7 +24,7 @@ import { PrismaModule } from '../../database/prisma.module';
       }),
     }),
   ],
-  controllers: [FilesController],
+  controllers: [FilesController, StaticFilesController],
   providers: [FilesService],
   exports: [FilesService],
 })

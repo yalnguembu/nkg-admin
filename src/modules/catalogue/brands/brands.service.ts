@@ -32,10 +32,12 @@ export class BrandsService {
 
   async findAll(filter: BrandFilterDto) {
     const { page = 1, limit = 10, search, isActive, order } = filter;
-    const skip = (page - 1) * limit;
+    const limitNum = Number(limit) || 10;
+    const pageNum = Number(page) || 1;
+    const skip = (pageNum - 1) * limitNum;
 
     const where: Prisma.BrandWhereInput = {
-      ...(isActive !== undefined && { isActive }),
+      ...(isActive !== undefined && { isActive: String(isActive) === 'true' }),
       ...(search && {
         name: { contains: search, mode: 'insensitive' },
       }),
@@ -45,7 +47,7 @@ export class BrandsService {
       this.prisma.brand.findMany({
         where,
         skip,
-        take: limit,
+        take: limitNum,
         orderBy: { name: order === 'asc' ? 'asc' : 'desc' },
         include: {
           _count: { select: { products: true, models: true } },

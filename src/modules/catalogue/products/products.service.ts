@@ -146,11 +146,11 @@ export class ProductsService {
     const skip = (page - 1) * limit;
 
     const where: Prisma.ProductWhereInput = {
-      ...(isActive !== undefined && { isActive }),
+      ...(isActive !== undefined && { isActive: String(isActive) === 'true' }),
       ...(categoryId && { categoryId }),
       ...(brandId && { brandId }),
       ...(modelId && { modelId }),
-      ...(isDropshipping !== undefined && { isDropshipping }),
+      ...(isDropshipping !== undefined && { isDropshipping: String(isDropshipping) === 'true' }),
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },
@@ -177,7 +177,7 @@ export class ProductsService {
       this.prisma.product.findMany({
         where,
         skip,
-        take: limit,
+        take: Number(limit),
         orderBy: { createdAt: order === 'asc' ? 'asc' : 'desc' },
         include: {
           category: { select: { id: true, name: true } },

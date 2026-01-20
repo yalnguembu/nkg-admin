@@ -48,10 +48,12 @@ export class CategoriesService {
       includeChildren,
       order,
     } = filter;
-    const skip = (page - 1) * limit;
+    const limitNum = Number(limit) || 100;
+    const pageNum = Number(page) || 1;
+    const skip = (pageNum - 1) * limitNum;
 
     const where: Prisma.CategoryWhereInput = {
-      ...(isActive !== undefined && { isActive }),
+      ...(isActive !== undefined && { isActive: String(isActive) === 'true' }),
       ...(parentId && { parentId }),
       ...(search && {
         OR: [
@@ -65,7 +67,7 @@ export class CategoriesService {
       this.prisma.category.findMany({
         where,
         skip,
-        take: limit,
+        take: limitNum,
         orderBy: { orderIndex: order === 'asc' ? 'asc' : 'desc' }, // default sort by orderIndex not just createdAt
         include: includeChildren
           ? {

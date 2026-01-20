@@ -15,10 +15,12 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter(), new PrismaExceptionFilter());
   app.useGlobalInterceptors(new TransformInterceptor(), new LoggingInterceptor());
 
-  // Enable CORS
-  app.enableCors();
+  app.enableCors({
+    origin: true,//configService.get<string>('FRONTEND_URL'),
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    credentials: true,
+  });
 
-  // Swagger Configuration
   const config = new DocumentBuilder()
     .setTitle('Admin Catalogue API')
     .setDescription('The Admin Catalogue API description')

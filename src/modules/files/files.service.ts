@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateFolderDto } from './dto/create-folder.dto';
+import { UPLOADS_URL_PREFIX } from '../../config/storage.config';
 
 export enum EntityType {
   CATEGORY = 'categories',
@@ -111,9 +112,10 @@ export class FilesService {
   ) {
     const folderId = await this.ensureEntityFolder(entityType);
 
+
     const fileData = {
       name: file.originalname,
-      url: `/uploads/${file.filename}`,
+      url: `${UPLOADS_URL_PREFIX}/${file.filename}`,
       size: file.size,
       mimeType: file.mimetype,
       folderId,

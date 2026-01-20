@@ -2,7 +2,8 @@
 ALTER TABLE "stock" ADD COLUMN     "version" INTEGER NOT NULL DEFAULT 0;
 
 -- AlterTable
-ALTER TABLE "stock_movements" ALTER COLUMN "performedBy" DROP NOT NULL;
+ALTER TABLE "stock_movements" ADD COLUMN     "customerId" UUID,
+ALTER COLUMN "performedBy" DROP NOT NULL;
 
 -- CreateTable
 CREATE TABLE "supplier_products" (
@@ -74,7 +75,7 @@ ALTER TABLE "supplier_products" ADD CONSTRAINT "supplier_products_productId_fkey
 ALTER TABLE "stock_movements" ADD CONSTRAINT "stock_movements_admin_user_fkey" FOREIGN KEY ("performedBy") REFERENCES "AdminUser"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "stock_movements" ADD CONSTRAINT "stock_movements_customer_fkey" FOREIGN KEY ("performedBy") REFERENCES "customers"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "stock_movements" ADD CONSTRAINT "stock_movements_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "customers"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "folders" ADD CONSTRAINT "folders_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "folders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
