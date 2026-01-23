@@ -1,495 +1,116 @@
-import { PrismaClient, CustomerType, PriceType, OrderStatus, PaymentMethod, PaymentStatus, DeliveryMethod, OrderType, AdminRole, MovementType, ReferenceType, DocumentType, ServiceType, AddressType, QuoteStatus } from '@prisma/client';
-import * as crypto from 'crypto';
+import { PrismaClient, PriceType, CustomerType, DocumentType } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Starting comprehensive seed...');
+  console.log('🧹 Cleaning up database catalog...');
 
-  // Helper to get random UUID
-  const uuid = () => crypto.randomUUID();
-  const timestamp = Date.now();
+  // Delete in order to avoid FK violations
+  await prisma.orderItem.deleteMany();
+  await prisma.cartItem.deleteMany();
+  await prisma.stockMovement.deleteMany();
+  await prisma.price.deleteMany();
+  await prisma.stock.deleteMany();
+  await prisma.productVariant.deleteMany();
+  await prisma.productImage.deleteMany();
+  await prisma.productDocument.deleteMany();
+  await prisma.supplierProduct.deleteMany();
+  await prisma.product.deleteMany();
+  await prisma.model.deleteMany();
+  await prisma.brand.deleteMany();
+  await prisma.category.deleteMany();
 
-  // ============================================
-  // 1. CONFIGURATION & AUTH
-  // ============================================
-  console.log('🔹 Seeding Configuration & Auth...');
+  console.log('✅ Catalog cleaned.');
 
-  // System Config
-  const systemConfigs = [
-    { key: 'site_name', value: 'Elektrik Store', description: 'Global site name' },
-    { key: 'currency', value: 'XAF', description: 'Default currency' },
-    { key: 'whatsapp_enabled', value: 'true', description: 'Enable WhatsApp integration' },
-    { key: 'whatsapp_business_phone', value: '+237699999999', description: 'Business Phone Number' },
-    {
-      key: 'whatsapp_template_order_creation',
-      value: `🛒 *Nouvelle Commande - #{{orderNumber}}*\n\nBonjour {{customerName}}, ...`,
-      description: 'Template for new orders'
-    },
-  ];
+  console.log('🌱 Seeding Disjoncteur différentiel Resi9...');
 
-  for (const config of systemConfigs) {
-    await prisma.systemConfig.upsert({
-      where: { key: config.key },
-      update: {},
-      create: config,
-    });
-  }
-
-  // Admin Users
-  const passwordHash = crypto.createHash('sha256').update('admin123').digest('hex'); // Simple hash for demo
-
-  const superAdmin = await prisma.adminUser.upsert({
-    where: { email: 'admin@elektrik.com' },
-    update: {},
-    create: {
-      id: uuid(),
-      email: 'admin@elektrik.com',
-      password: passwordHash,
-      firstName: 'Super',
-      lastName: 'Admin',
-      role: AdminRole.SUPER_ADMIN,
-      isActive: true,
+  // 1. Create Category
+  const category = await prisma.category.create({
+    data: {
+      name: 'Protection Electrique',
+      slug: 'protection-electrique',
+      description: 'Disjoncteurs, interrupteurs différentiels et accessoires de protection.',
     },
   });
 
-  const manager = await prisma.adminUser.upsert({
-    where: { email: 'manager@elektrik.com' },
-    update: {},
-    create: {
-      id: uuid(),
-      email: 'manager@elektrik.com',
-      password: passwordHash,
-      firstName: 'John',
-      lastName: 'Manager',
-      role: AdminRole.MANAGER,
-      isActive: true,
+  // 2. Create Brand
+  const brand = await prisma.brand.create({
+    data: {
+      name: 'Schneider Electric',
+      slug: 'schneider-electric',
     },
   });
 
-  // Site Configuration
-  await prisma.siteConfiguration.upsert({
-    where: { key: 'site_branding' },
-    update: {},
-    create: {
-      key: 'site_branding',
-      value: { name: 'Elektrik Store', logoUrl: '/logo.png', theme: 'dark' },
-      category: 'general',
-      updatedBy: superAdmin.id,
-    },
-  });
-
-  // Activity Logs
-  await prisma.activityLog.create({
+  // 3. Create Product
+  const product = await prisma.product.create({
     data: {
-      userId: superAdmin.id,
-      action: 'SEED_EXECUTION',
-      entityType: 'SYSTEM',
-      details: { timestamp: new Date() },
-      ipAddress: '127.0.0.1'
-    }
-  });
-
-  // ============================================
-  // 2. SUPPLY CHAIN
-  // ============================================
-  console.log('🔹 Seeding Supply Chain...');
-
-  const supplier1 = await prisma.supplier.create({
-    data: {
-      name: 'Global Tech Suppliers',
-      contactName: 'Alice Vendor',
-      email: 'sales@globaltech.com',
-      phone: '+1234567890',
-      deliveryDelayDays: 14,
-    }
-  });
-
-  const supplier2 = await prisma.supplier.create({
-    data: {
-      name: 'Local Electro Wholesalers',
-      contactName: 'Bob Builder',
-      email: 'orders@localelectro.cm',
-      phone: '+237600000000',
-      deliveryDelayDays: 2,
-    }
-  });
-
-  // ============================================
-  // 3. CATALOGUE FOUNDATION (Categories, Brands)
-  // ============================================
-  console.log('🔹 Seeding Categories & Brands...');
-
-  // Categories
-  const electCat = await prisma.category.upsert({
-    where: { slug: 'electronics' },
-    update: {},
-    create: { name: 'Electronics', slug: 'electronics', orderIndex: 1 },
-  });
-
-  const phonesCat = await prisma.category.upsert({
-    where: { slug: 'smartphones' },
-    update: {},
-    create: { name: 'Smartphones', slug: 'smartphones', parentId: electCat.id, orderIndex: 1 },
-  });
-
-  const homeCat = await prisma.category.upsert({
-    where: { slug: 'home-appliances' },
-    update: {},
-    create: { name: 'Home Appliances', slug: 'home-appliances', orderIndex: 2 },
-  });
-
-  // Brands
-  const samsung = await prisma.brand.upsert({ where: { slug: 'samsung' }, update: {}, create: { name: 'Samsung', slug: 'samsung' } });
-  const apple = await prisma.brand.upsert({ where: { slug: 'apple' }, update: {}, create: { name: 'Apple', slug: 'apple' } });
-  const lg = await prisma.brand.upsert({ where: { slug: 'lg' }, update: {}, create: { name: 'LG', slug: 'lg' } });
-
-  // Models
-  const modelS21 = await prisma.model.upsert({
-    where: { slug: 'galaxy-s21' },
-    update: {},
-    create: {
-      brandId: samsung.id,
-      name: 'Galaxy S21',
-      slug: 'galaxy-s21',
-      reference: 'SM-G991',
-      year: 2021
-    }
-  });
-
-  // Services
-  const installService = await prisma.service.upsert({
-    where: { slug: 'tv-wall-mounting' },
-    update: {},
-    create: {
-      name: 'TV Wall Mounting',
-      slug: 'tv-wall-mounting',
-      description: 'Professional wall mounting for TVs up to 85 inches',
-    }
-  });
-
-  // Installation Pricing
-  await prisma.installationPricing.create({
-    data: {
-      serviceType: ServiceType.SECURITY,
-      hourlyRate: 15000,
-      travelCostPerKm: 500,
-      pricingRules: { minHours: 2, taxRate: 0.1925 },
-    }
-  });
-
-  // ============================================
-  // 4. PRODUCTS & VARIANTS
-  // ============================================
-  console.log('🔹 Seeding Products...');
-
-  // Product 1: Samsung S21
-  const productPhone = await prisma.product.create({
-    data: {
-      name: 'Samsung Galaxy S21 5G',
-      slug: `samsung-s21-5g-${timestamp}`,
-      sku: `SAM-S21-5G-${timestamp}`,
-      categoryId: phonesCat.id,
-      brandId: samsung.id,
-      modelId: modelS21.id,
-      description: 'The epic phone for epic moments.',
-      images: {
-        create: [
-          { imageUrl: 'https://placehold.co/600x400?text=S21+Front', isPrimary: true },
-          { imageUrl: 'https://placehold.co/600x400?text=S21+Back', isPrimary: false },
-        ]
-      },
-      documents: {
-        create: {
-          name: 'User Manual',
-          documentUrl: 'https://example.com/manual.pdf',
-          documentType: DocumentType.MANUAL
-        }
-      },
-      dropshipSupplierId: supplier1.id,
-      supplierProducts: {
-        create: {
-          supplierId: supplier1.id,
-          supplierSku: 'SUP-SAM-S21',
-          costPrice: 350000,
-        }
-      }
-    }
-  });
-
-  // Variant 1: S21 128GB Black
-  const variantPhoneBlack = await prisma.productVariant.create({
-    data: {
-      productId: productPhone.id,
-      sku: `SAM-S21-BLK-128-${timestamp}`,
-      name: 'Phantom Black 128GB',
-      attributes: { color: 'Black', storage: '128GB' },
-      prices: {
-        createMany: {
-          data: [
-            { priceType: PriceType.BASE, customerType: CustomerType.B2C, amount: 450000, minQuantity: 1 },
-            { priceType: PriceType.BASE, customerType: CustomerType.B2C, amount: 420000, minQuantity: 10 }, // Bulk B2C
-            { priceType: PriceType.WHOLESALE, customerType: CustomerType.B2B, amount: 400000, minQuantity: 1 },
-            {
-              priceType: PriceType.PROMO,
-              customerType: CustomerType.B2C,
-              amount: 380000,
-              minQuantity: 1,
-              validFrom: new Date(),
-              validTo: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 1 week
-            },
-          ]
-        }
-      },
-      stock: {
-        create: { quantity: 50, alertThreshold: 10 }
-      }
-    }
-  });
-
-  // Stock Movement (Initial IN)
-  await prisma.stockMovement.create({
-    data: {
-      variantId: variantPhoneBlack.id,
-      movementType: MovementType.IN,
-      referenceType: ReferenceType.PURCHASE,
-      quantity: 50,
-      reason: 'Initial Stock Purchase',
-      supplierId: supplier1.id,
-      performedBy: superAdmin.id,
-    }
-  });
-
-
-  // Product 2: LG TV
-  const productTV = await prisma.product.create({
-    data: {
-      name: 'LG 65" OLED 4K TV',
-      slug: `lg-oled-65-${timestamp}`,
-      sku: `LG-OLED-65-${timestamp}`,
-      categoryId: homeCat.id,
-      brandId: lg.id,
-      description: 'Experience self-lit pixels.',
-      requiresInstallation: true, // Interesting for services
-      dropshipSupplierId: supplier2.id,
-      supplierProducts: {
-        create: {
-          supplierId: supplier2.id,
-          supplierSku: 'SUP-LG-OLED-65',
-          costPrice: 900000,
-        }
-      }
-    }
-  });
-
-  const variantTV = await prisma.productVariant.create({
-    data: {
-      productId: productTV.id,
-      sku: `LG-OLED-65-STD-${timestamp}`,
-      name: 'Standard',
-      prices: {
-        createMany: {
-          data: [
-            { priceType: PriceType.BASE, customerType: CustomerType.B2C, amount: 1200000, minQuantity: 1 },
-            { priceType: PriceType.BASE, customerType: CustomerType.B2C, amount: 1100000, minQuantity: 5 }, // Bulk 5+
-          ]
-        }
-      },
-      stock: {
-        create: { quantity: 5, alertThreshold: 1 }
-      }
-    }
-  });
-
-  // Product 3: Solar Panel
-  const productSolar = await prisma.product.create({
-    data: {
-      name: 'Solar Panel 400W Monocrystalline',
-      slug: `solar-panel-400w-${timestamp}`,
-      sku: `SOL-400W-${timestamp}`,
-      categoryId: electCat.id,
-      description: 'High efficiency solar panel for home and industrial use.',
+      name: 'Resi9 - disjoncteur différentiel - 1P+N - 16A - 30mA - courbe C - type Fsi',
+      slug: 'resi9-disjoncteur-differentiel-16a-30ma-fsi',
+      sku: 'R9PDCF16',
+      description: 'Disjoncteur différentiel avec protection contre les surintensités (RCBO). Gamme Resi9, Type DD, 1P+N, 16A, CA, Sensibilité 30mA, Type F.',
+      categoryId: category.id,
+      brandId: brand.id,
       requiresInstallation: true,
+      metaTitle: 'Disjoncteur différentiel Resi9 16A 30mA Type Fsi - R9PDCF16',
+      metaDescription: 'Achetez le disjoncteur différentiel Schneider Electric Resi9 16A 30mA Type Fsi au meilleur prix. Protection optimale pour votre installation électrique.',
+      technicalSpecs: {
+        "Gamme": "Resi9",
+        "Nom du produit": "Resi9 DD",
+        "Type de produit": "Disjoncteur différentiel avec protection contre les surintensités (RCBO)",
+        "Application": "Distribution",
+        "Description des pôles": "1P + N",
+        "Position neutre": "Gauche",
+        "Courant nominal [In]": "16 A à 30 °C",
+        "Type de réseau": "CA",
+        "Technologie du déclencheur": "Thermique-magnétique",
+        "Courbe de déclenchement": "C",
+        "Sensibilité du différentiel": "30 mA",
+        "Classe de protection différentielle": "Type F",
+        "Pouvoir de coupure": "3000 A Icn à 230 V CA 50 Hz",
+        "Tension assignée d'emploi [Ue]": "230 V CA 50 Hz",
+        "Fréquence": "50 Hz",
+        "Dimensions": "82 x 36 x 70.5 mm",
+        "Poids Net": "186 g",
+        "Couleur": "Blanc (RAL 9003)",
+        "Durée de vie mécanique": "20000 cycles",
+        "IP": "IP20 / IP40",
+      },
       images: {
         create: [
-          { imageUrl: 'https://placehold.co/600x400?text=Solar+Panel', isPrimary: true },
+          { imageUrl: "https://api.store.nguembu.cloud/uploads/8cff531079e7fc10ab757256285eea3cb9.jpeg", isPrimary: true },
+          { imageUrl: "https://api.store.nguembu.cloud/uploads/8cff531079e7fc10ab757256285eea3cb9.jpg", isPrimary: false },
+          { imageUrl: "https://api.store.nguembu.cloud/uploads/10c10cb2da610b0d9fc10464768d3c8679f.jpg", isPrimary: false },
+          { imageUrl: "https://api.store.nguembu.cloud/uploads/1716d6374289100fb81ed2138ab5a1501.jpg", isPrimary: false },
+          { imageUrl: "https://api.store.nguembu.cloud/uploads/2407251032d0a5c3cbff672c6b710458c7.jpeg", isPrimary: false },
+          { imageUrl: "https://api.store.nguembu.cloud/uploads/2407251032d0a5c3cbff672c6b714558c7.jpg", isPrimary: false },
+          { imageUrl: "https://api.store.nguembu.cloud/uploads/2407251032d0d5c3cbff672c6b710458c7.jpg", isPrimary: false },
         ]
-      },
-      supplierProducts: {
-        create: {
-          supplierId: supplier1.id,
-          supplierSku: 'SUP-SOL-400W',
-          costPrice: 100000,
-        }
       }
-    }
+    },
   });
 
-  const variantSolar = await prisma.productVariant.create({
+  // 4. Create Variant
+  const variant = await prisma.productVariant.create({
     data: {
-      productId: productSolar.id,
-      sku: `SOL-400W-STD-${timestamp}`,
-      name: '400W Standard',
+      productId: product.id,
+      sku: 'R9PDCF16-STD',
+      name: 'Standard 16A',
       prices: {
         createMany: {
           data: [
-            { priceType: PriceType.BASE, customerType: CustomerType.B2C, amount: 150000, minQuantity: 1 },
-            { priceType: PriceType.BASE, customerType: CustomerType.B2C, amount: 130000, minQuantity: 5 }, // Bulk 5+
-            { priceType: PriceType.WHOLESALE, customerType: CustomerType.B2B, amount: 120000, minQuantity: 1 },
+            { priceType: PriceType.BASE, customerType: CustomerType.B2C, amount: 25000, minQuantity: 1 },
+            { priceType: PriceType.BASE, customerType: CustomerType.B2C, amount: 22000, minQuantity: 10 },
+            { priceType: PriceType.WHOLESALE, customerType: CustomerType.B2B, amount: 20000, minQuantity: 1 },
           ]
         }
       },
       stock: {
         create: { quantity: 100, alertThreshold: 10 }
       }
-    }
+    },
   });
 
-  // ============================================
-  // 5. CUSTOMERS
-  // ============================================
-  console.log('🔹 Seeding Customers...');
-
-  const b2cCustomer = await prisma.customer.upsert({
-    where: { email: 'john.doe@gmail.com' },
-    update: {},
-    create: {
-      id: uuid(),
-      email: 'john.doe@gmail.com',
-      firstName: 'John',
-      lastName: 'Doe',
-      phone: '+237612345678',
-      customerType: CustomerType.B2C,
-      addresses: {
-        create: [
-          {
-            addressType: AddressType.SHIPPING,
-            fullName: 'John Doe',
-            addressLine1: '123 Main St, Akwa',
-            city: 'Douala',
-            country: 'CM',
-            isDefault: true
-          }
-        ]
-      }
-    }
-  });
-
-  const b2bCustomer = await prisma.customer.upsert({
-    where: { email: 'procurement@bigcorp.cm' },
-    update: {},
-    create: {
-      id: uuid(),
-      email: 'procurement@bigcorp.cm',
-      firstName: 'Jane',
-      lastName: 'Smith',
-      companyName: 'Big Corp SARL',
-      taxId: 'M052100000000',
-      phone: '+237699999999',
-      customerType: CustomerType.B2B,
-      addresses: {
-        create: [
-          {
-            addressType: AddressType.BILLING,
-            fullName: 'Big Corp HQ',
-            addressLine1: 'Business District',
-            city: 'Yaounde',
-            country: 'CM',
-            isDefault: true
-          }
-        ]
-      }
-    }
-  });
-
-  // ============================================
-  // 6. SALES (Orders, Carts, Quotes)
-  // ============================================
-  console.log('🔹 Seeding Sales Data...');
-
-  // Cart
-  await prisma.cart.create({
-    data: {
-      customerId: b2cCustomer.id,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
-      items: {
-        create: {
-          variantId: variantPhoneBlack.id,
-          quantity: 1
-        }
-      }
-    }
-  });
-
-  // 6a. Completed Order
-  const orderCompleted = await prisma.order.create({
-    data: {
-      orderNumber: `ORD-${timestamp}-001`,
-      customerId: b2cCustomer.id,
-      status: OrderStatus.COMPLETED,
-      orderType: OrderType.SALE_AND_INSTALLATION,
-      totalAmount: 1215000,
-      subtotal: 1200000,
-      installationCost: 15000,
-      items: {
-        create: [
-          {
-            variantId: variantTV.id,
-            productName: 'LG 65" OLED 4K TV',
-            sku: variantTV.sku,
-            unitPrice: 1200000,
-            quantity: 1,
-            totalPrice: 1200000,
-            serviceId: installService.id,
-          }
-        ]
-      },
-      payments: {
-        create: {
-          amount: 1215000,
-          method: PaymentMethod.MOBILE_MONEY,
-          status: PaymentStatus.PAID,
-          transactionId: 'TXN-123456',
-          paidAt: new Date(),
-        }
-      }
-    }
-  });
-
-  // 6b. Pending Order
-  const orderPending = await prisma.order.create({
-    data: {
-      orderNumber: `ORD-${timestamp}-002`,
-      customerId: b2bCustomer.id,
-      status: OrderStatus.PENDING,
-      orderType: OrderType.SALE_ONLY,
-      totalAmount: 800000,
-      subtotal: 800000,
-      items: {
-        create: {
-          variantId: variantPhoneBlack.id,
-          productName: 'Samsung Galaxy S21 5G',
-          sku: variantPhoneBlack.sku,
-          unitPrice: 400000, // Wholesale price
-          quantity: 2,
-          totalPrice: 800000,
-        }
-      }
-    }
-  });
-
-  // 6c. Quote
-  await prisma.quote.create({
-    data: {
-      quoteNumber: `QT-${timestamp}-001`,
-      orderId: orderPending.id,
-      validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-      status: QuoteStatus.PENDING,
-      calculatedInstallationCost: 0,
-    }
-  });
-
-  console.log('✅ Seed completed successfully!');
+  console.log(`✅ Product "${product.name}" seeded successfully!`);
 }
 
 main()
