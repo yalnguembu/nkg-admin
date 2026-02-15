@@ -10,13 +10,16 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
-  const port = configService.get<number>('app.port') || 3000;
+  const port = configService.get<number>('app.port') || 3004;
 
   app.useGlobalFilters(new HttpExceptionFilter(), new PrismaExceptionFilter());
-  app.useGlobalInterceptors(new TransformInterceptor(), new LoggingInterceptor());
+  app.useGlobalInterceptors(
+    new TransformInterceptor(),
+    new LoggingInterceptor(),
+  );
 
   app.enableCors({
-    origin: true,//configService.get<string>('FRONTEND_URL'),
+    origin: true, //configService.get<string>('FRONTEND_URL'),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });

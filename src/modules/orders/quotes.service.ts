@@ -10,7 +10,11 @@ import { WhatsAppTemplateService } from '../../utils/whatsapp/whatsapp-template.
 import { StockService } from '../stock/stock.service';
 import { ConfigService } from '@nestjs/config';
 import { QuoteStatus, OrderStatus } from '@prisma/client';
-import { UpdateQuoteDto, AcceptQuoteDto, CreateQuoteDto } from './dto/quote.dto';
+import {
+  UpdateQuoteDto,
+  AcceptQuoteDto,
+  CreateQuoteDto,
+} from './dto/quote.dto';
 import { QuoteFilterDto } from './dto/quote-filter.dto';
 import { OrdersService } from './orders.service';
 import { Prisma } from '@prisma/client';
@@ -27,20 +31,25 @@ export class QuotesService implements OnModuleInit {
     private configService: ConfigService,
     private ordersService: OrdersService,
     private installationPricingService: InstallationPricingService,
-  ) { }
+  ) {}
 
   onModuleInit() {
     // Schedule expiration check every hour (native implementation)
-    this.expirationCheckInterval = setInterval(async () => {
-      console.log('Running scheduled quote expiration check...');
-      const count = await this.checkExpirations();
-      if (count > 0) console.log(`Expired ${count} quotes.`);
-    }, 60 * 60 * 1000); // 1 hour
+    this.expirationCheckInterval = setInterval(
+      async () => {
+        console.log('Running scheduled quote expiration check...');
+        const count = await this.checkExpirations();
+        if (count > 0) console.log(`Expired ${count} quotes.`);
+      },
+      60 * 60 * 1000,
+    ); // 1 hour
   }
 
   async create(dto: CreateQuoteDto, customerId: string) {
     if (!dto.cartId && !dto.orderId) {
-      throw new BadRequestException('Either cartId or orderId must be provided to create a quote');
+      throw new BadRequestException(
+        'Either cartId or orderId must be provided to create a quote',
+      );
     }
 
     let orderId = dto.orderId;
@@ -50,7 +59,7 @@ export class QuotesService implements OnModuleInit {
       // Create Order with DRAFT status
       // We use OrdersService to handle cart logic, stock reservation (if any? maybe skip for quote?), etc.
       // NOTE: Quotes usually don't reserve stock until accepted?
-      // If stock logic in OrdersService reserves stock, we might want to release it immediately or 
+      // If stock logic in OrdersService reserves stock, we might want to release it immediately or
       // avoid usage of OrdersService.create for quotes if it reserves stock.
       // Current OrdersService.create reserves stock.
       // For Quote, we probably DOES NOT want to reserve stock yet.
@@ -66,7 +75,7 @@ export class QuotesService implements OnModuleInit {
           shippingAddressId: undefined, // Quote phase might not have address yet
         } as any, // Cast to avoid strict check for now if DTO mismatch
         customerId,
-        OrderStatus.DRAFT
+        OrderStatus.DRAFT,
       );
       orderId = order.id;
     }
@@ -78,7 +87,9 @@ export class QuotesService implements OnModuleInit {
     // Calculate specific quote additions? e.g. Installation
     // Order already has installationCost from OrdersService logic (which uses InstallationPricingService).
 
-    const validUntil = dto.validUntil ? new Date(dto.validUntil) : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days default
+    const validUntil = dto.validUntil
+      ? new Date(dto.validUntil)
+      : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days default
 
     const quoteNumber = `QT-${Date.now()}`;
 
@@ -89,7 +100,7 @@ export class QuotesService implements OnModuleInit {
         validUntil,
         calculatedInstallationCost: order.installationCost, // Sync with order
         status: QuoteStatus.PENDING,
-      }
+      },
     });
 
     // Generate WhatsApp Link immediately?
@@ -109,9 +120,25 @@ export class QuotesService implements OnModuleInit {
         OR: [
           { quoteNumber: { contains: search, mode: 'insensitive' } },
           { order: { orderNumber: { contains: search, mode: 'insensitive' } } },
-          { order: { customer: { firstName: { contains: search, mode: 'insensitive' } } } },
-          { order: { customer: { lastName: { contains: search, mode: 'insensitive' } } } },
-          { order: { customer: { companyName: { contains: search, mode: 'insensitive' } } } },
+          {
+            order: {
+              customer: {
+                firstName: { contains: search, mode: 'insensitive' },
+              },
+            },
+          },
+          {
+            order: {
+              customer: { lastName: { contains: search, mode: 'insensitive' } },
+            },
+          },
+          {
+            order: {
+              customer: {
+                companyName: { contains: search, mode: 'insensitive' },
+              },
+            },
+          },
         ],
       }),
     };
@@ -128,9 +155,16 @@ export class QuotesService implements OnModuleInit {
               id: true,
               orderNumber: true,
               totalAmount: true,
-              customer: { select: { id: true, firstName: true, lastName: true, companyName: true } }
-            }
-          }
+              customer: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  companyName: true,
+                },
+              },
+            },
+          },
         },
       }),
       this.prisma.quote.count({ where }),
@@ -173,12 +207,20 @@ export class QuotesService implements OnModuleInit {
   async accept(id: string, dto: AcceptQuoteDto) {
     const quote = await this.findOne(id);
 
-    if (quote.status !== QuoteStatus.SENT && quote.status !== QuoteStatus.PENDING) {
-      throw new BadRequestException(`Cannot accept quote in status ${quote.status}`);
+    if (
+      quote.status !== QuoteStatus.SENT &&
+      quote.status !== QuoteStatus.PENDING
+    ) {
+      throw new BadRequestException(
+        `Cannot accept quote in status ${quote.status}`,
+      );
     }
 
     if (new Date() > quote.validUntil) {
-      await this.prisma.quote.update({ where: { id }, data: { status: QuoteStatus.EXPIRED } });
+      await this.prisma.quote.update({
+        where: { id },
+        data: { status: QuoteStatus.EXPIRED },
+      });
       throw new BadRequestException('Quote has expired');
     }
 
@@ -188,11 +230,13 @@ export class QuotesService implements OnModuleInit {
         await this.stockService.reserveStock(item.variantId, {
           quantity: item.quantity,
           referenceId: quote.orderId,
-          referenceType: 'ORDER'
+          referenceType: 'ORDER',
         });
       } catch (error) {
         // Rollback? complex. For now throw.
-        throw new BadRequestException(`Stock reservation failed for ${item.productName}: ${error.message}`);
+        throw new BadRequestException(
+          `Stock reservation failed for ${item.productName}: ${error.message}`,
+        );
       }
     }
 
@@ -201,8 +245,8 @@ export class QuotesService implements OnModuleInit {
       where: { id },
       data: {
         status: QuoteStatus.ACCEPTED,
-        acceptedAt: new Date()
-      }
+        acceptedAt: new Date(),
+      },
     });
 
     // Convert Order to CONFIRMED (or AWAITING_PAYMENT)
@@ -211,8 +255,10 @@ export class QuotesService implements OnModuleInit {
       data: {
         status: OrderStatus.CONFIRMED, // Or AWAITING_PAYMENT?
         confirmedAt: new Date(),
-        notes: dto.notes ? `${quote.order.notes || ''}\nQuote Acceptance Note: ${dto.notes}` : quote.order.notes
-      }
+        notes: dto.notes
+          ? `${quote.order.notes || ''}\nQuote Acceptance Note: ${dto.notes}`
+          : quote.order.notes,
+      },
     });
 
     return this.findOne(id);
@@ -221,7 +267,7 @@ export class QuotesService implements OnModuleInit {
   async reject(id: string) {
     return this.prisma.quote.update({
       where: { id },
-      data: { status: QuoteStatus.REJECTED }
+      data: { status: QuoteStatus.REJECTED },
     });
   }
 
@@ -229,11 +275,11 @@ export class QuotesService implements OnModuleInit {
     const expired = await this.prisma.quote.updateMany({
       where: {
         status: { in: [QuoteStatus.PENDING, QuoteStatus.SENT] },
-        validUntil: { lt: new Date() }
+        validUntil: { lt: new Date() },
       },
       data: {
-        status: QuoteStatus.EXPIRED
-      }
+        status: QuoteStatus.EXPIRED,
+      },
     });
     return expired.count;
   }
@@ -242,11 +288,11 @@ export class QuotesService implements OnModuleInit {
     const quote = await this.findOne(id);
     // Stub: In real app, generate PDF via library (e.g. pdfkit, puppeteer)
     // and upload to storage (S3). Return URL.
-    const mockUrl = `${this.configService.get('APP_URL') || 'http://localhost:3000'}/api/quotes/${id}/download`;
+    const mockUrl = `${this.configService.get('APP_URL') || 'http://localhost:3004'}/api/quotes/${id}/download`;
 
     await this.prisma.quote.update({
       where: { id },
-      data: { pdfUrl: mockUrl }
+      data: { pdfUrl: mockUrl },
     });
 
     return { url: mockUrl };
@@ -288,12 +334,15 @@ export class QuotesService implements OnModuleInit {
     );
 
     // Update status to SENT if it was PENDING/DRAFT
-    if (quote.status === QuoteStatus.PENDING || quote.status === QuoteStatus.DRAFT) {
+    if (
+      quote.status === QuoteStatus.PENDING ||
+      quote.status === QuoteStatus.DRAFT
+    ) {
       await this.prisma.quote.update({
         where: { id: quoteId },
         data: {
           whatsappUrl,
-          status: QuoteStatus.SENT
+          status: QuoteStatus.SENT,
         },
       });
     } else {
