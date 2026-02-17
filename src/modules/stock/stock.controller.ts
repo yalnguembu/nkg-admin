@@ -18,13 +18,23 @@ import {
 @ApiTags('Stock')
 @Controller('stock')
 export class StockController {
-  constructor(private readonly stockService: StockService) { }
+  constructor(private readonly stockService: StockService) {}
 
   @Get('low-stock')
   @ApiOperation({ summary: 'Get items with low stock' })
   @ApiResponse({ status: 200, description: 'Return low stock items' })
   getLowStockItems() {
     return this.stockService.getLowStockItems();
+  }
+
+  @Get('all-movements')
+  @ApiOperation({ summary: 'Get all stock movements' })
+  @ApiResponse({ status: 200, description: 'Return all movements' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getAllMovements(
+    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
+  ) {
+    return this.stockService.getAllMovements(limit);
   }
 
   @Get(':variantId')
@@ -62,7 +72,7 @@ export class StockController {
     @Body() dto: StockAdjustmentDto,
   ) {
     // In a real app, get user ID from request
-    return this.stockService.adjustStock(variantId, dto, 'ADMIN_USER');
+    return this.stockService.adjustStock(variantId, dto, undefined);
   }
 
   @Get(':variantId/movements')

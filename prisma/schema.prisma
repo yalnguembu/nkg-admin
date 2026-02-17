@@ -345,7 +345,7 @@ model PriceHistory {
 }
 
 model SupplierProduct {
-  supplierId   String   @id @db.Uuid
+  supplierId   String   @db.Uuid
   productId    String   @db.Uuid
   supplierSku  String?  @db.VarChar(100)
   costPrice    Decimal? @db.Decimal(10, 2)
@@ -357,6 +357,7 @@ model SupplierProduct {
   supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
+  @@id([supplierId, productId])
   @@index([supplierId])
   @@index([productId])
   @@map("supplier_products")

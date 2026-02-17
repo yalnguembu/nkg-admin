@@ -69,6 +69,16 @@ export class CreateProductDto {
   @IsUUID()
   @IsOptional()
   dropshipSupplierId?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  metaTitle?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  metaDescription?: string;
 }
 
 export class CreateProductFullDto extends CreateProductDto {

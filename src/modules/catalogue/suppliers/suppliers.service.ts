@@ -11,17 +11,24 @@ import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class SuppliersService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   async create(createSupplierDto: CreateSupplierDto) {
+    const data = {
+      ...createSupplierDto,
+      deliveryDelayDays: createSupplierDto.deliveryDelayDays
+        ? Math.round(createSupplierDto.deliveryDelayDays)
+        : undefined,
+    };
     return this.prisma.supplier.create({
-      data: createSupplierDto,
+      data,
     });
   }
 
   async findAll(filter: SupplierFilterDto) {
     const { page = 1, limit = 10, search, isActive, order } = filter;
-    const skip = (page - 1) * limit;
+    const limitNum = Number(limit);
+    const skip = (Number(page) - 1) * limitNum;
 
     const where: Prisma.SupplierWhereInput = {
       ...(isActive !== undefined && { isActive }),
@@ -38,7 +45,7 @@ export class SuppliersService {
       this.prisma.supplier.findMany({
         where,
         skip,
-        take: limit,
+        take: limitNum,
         orderBy: { name: order === 'asc' ? 'asc' : 'desc' },
         include: {
           _count: { select: { products: true, stockMovements: true } },
@@ -82,7 +89,9 @@ export class SuppliersService {
     if (!supplier) throw new NotFoundException('Supplier not found');
 
     if (supplier._count.products > 0) {
-      throw new BadRequestException('Cannot delete supplier with associated products');
+      throw new BadRequestException(
+        'Cannot delete supplier with associated products',
+      );
     }
 
     return this.prisma.supplier.delete({ where: { id } });
@@ -94,9 +103,9 @@ export class SuppliersService {
       where: { id },
       include: {
         products: {
-          select: { id: true, name: true, sku: true, isActive: true }
-        }
-      }
+          select: { id: true, name: true, sku: true, isActive: true },
+        },
+      },
     });
     if (!supplier) throw new NotFoundException('Supplier not found');
     return supplier.products;

@@ -15,7 +15,7 @@ import { AdminModule } from '../admin/admin.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('supabase.jwtSecret'),
+        secret: configService.get<string>('app.jwtSecret'),
         signOptions: { expiresIn: '60m' },
       }),
     }),
@@ -24,4 +24,4 @@ import { AdminModule } from '../admin/admin.module';
   providers: [AuthService, JwtStrategy],
   exports: [AuthService],
 })
-export class AuthModule { }
+export class AuthModule {}

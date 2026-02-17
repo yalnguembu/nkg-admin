@@ -10,11 +10,11 @@ import {
   ReleaseStockDto,
   StockAdjustmentDto,
 } from './dto/stock.dto';
-import { MovementType, ReferenceType } from '@prisma/client';
+import { Prisma, MovementType, ReferenceType } from '@prisma/client';
 
 @Injectable()
 export class StockService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   async getStock(variantId: string) {
     const stock = await this.prisma.stock.findUnique({
@@ -29,9 +29,7 @@ export class StockService {
     });
 
     if (!stock) {
-      throw new NotFoundException(
-        `Stock for variant "${variantId}" not found`,
-      );
+      throw new NotFoundException(`Stock for variant "${variantId}" not found`);
     }
 
     return stock;
@@ -68,16 +66,18 @@ export class StockService {
     const updatedStock = await this.prisma.stock.update({
       where: {
         variantId,
-        version: stock.version
+        version: stock.version,
       },
       data: {
         reservedQuantity: { increment: dto.quantity },
-        version: { increment: 1 }
+        version: { increment: 1 },
       },
     });
 
     if (!updatedStock) {
-      throw new ConflictException('Concurrency conflict: Stock was modified by another process.');
+      throw new ConflictException(
+        'Concurrency conflict: Stock was modified by another process.',
+      );
     }
 
     await this.recordMovement({
@@ -106,16 +106,18 @@ export class StockService {
     const updatedStock = await this.prisma.stock.update({
       where: {
         variantId,
-        version: stock.version
+        version: stock.version,
       },
       data: {
         reservedQuantity: { decrement: dto.quantity },
-        version: { increment: 1 }
+        version: { increment: 1 },
       },
     });
 
     if (!updatedStock) {
-      throw new ConflictException('Concurrency conflict: Stock was modified by another process.');
+      throw new ConflictException(
+        'Concurrency conflict: Stock was modified by another process.',
+      );
     }
 
     await this.recordMovement({
@@ -132,7 +134,12 @@ export class StockService {
     return updatedStock;
   }
 
-  async confirmStockDeduction(variantId: string, quantity: number, referenceId: string, referenceType: string) {
+  async confirmStockDeduction(
+    variantId: string,
+    quantity: number,
+    referenceId: string,
+    referenceType: string,
+  ) {
     const stock = await this.getStock(variantId);
 
     // When confirming an order, we move stock from 'reserved' to 'out'
@@ -143,16 +150,18 @@ export class StockService {
       const updatedStock = await this.prisma.stock.update({
         where: {
           variantId,
-          version: stock.version
+          version: stock.version,
         },
         data: {
           quantity: { decrement: quantity },
-          version: { increment: 1 }
-        }
+          version: { increment: 1 },
+        },
       });
 
       if (!updatedStock) {
-        throw new ConflictException('Concurrency conflict: Stock was modified by another process.');
+        throw new ConflictException(
+          'Concurrency conflict: Stock was modified by another process.',
+        );
       }
 
       await this.recordMovement({
@@ -171,17 +180,19 @@ export class StockService {
     const updatedStock = await this.prisma.stock.update({
       where: {
         variantId,
-        version: stock.version
+        version: stock.version,
       },
       data: {
         quantity: { decrement: quantity },
         reservedQuantity: { decrement: quantity },
-        version: { increment: 1 }
+        version: { increment: 1 },
       },
     });
 
     if (!updatedStock) {
-      throw new ConflictException('Concurrency conflict: Stock was modified by another process.');
+      throw new ConflictException(
+        'Concurrency conflict: Stock was modified by another process.',
+      );
     }
 
     await this.recordMovement({
@@ -198,49 +209,65 @@ export class StockService {
     return updatedStock;
   }
 
-  async adjustStock(variantId: string, dto: StockAdjustmentDto, changedBy?: string) {
+  async adjustStock(
+    variantId: string,
+    dto: StockAdjustmentDto,
+    changedBy?: string,
+  ) {
     const stock = await this.getStock(variantId);
 
     // Determine movement type based on quantity
     const isIncrement = dto.quantity > 0;
     const absQty = Math.abs(dto.quantity);
-    const type = isIncrement ? MovementType.ADJUSTMENT_IN : MovementType.ADJUSTMENT_OUT;
+    const type = isIncrement
+      ? MovementType.ADJUSTMENT_IN
+      : MovementType.ADJUSTMENT_OUT;
 
     // If restocking (positive adjustment with supplier)
-    const movementType = dto.supplierId && isIncrement ? MovementType.PURCHASE : type;
+    const movementType =
+      dto.supplierId && isIncrement ? MovementType.PURCHASE : type;
 
     if (!isIncrement && stock.quantity < absQty) {
-      throw new ConflictException(`Cannot remove ${absQty}. Current stock: ${stock.quantity}`);
+      throw new ConflictException(
+        `Cannot remove ${absQty}. Current stock: ${stock.quantity}`,
+      );
     }
 
-    const updatedStock = await this.prisma.stock.update({
-      where: {
-        variantId,
-        version: stock.version
-      },
-      data: {
-        quantity: { increment: dto.quantity },
-        version: { increment: 1 }
+    return this.prisma.$transaction(async (tx) => {
+      const updatedStock = await tx.stock.update({
+        where: {
+          variantId,
+          version: stock.version,
+        },
+        data: {
+          quantity: { increment: dto.quantity },
+          version: { increment: 1 },
+        },
+      });
+
+      if (!updatedStock) {
+        throw new ConflictException(
+          'Concurrency conflict: Stock was modified by another process.',
+        );
       }
+
+      await this.recordMovement({
+        variantId: stock.variantId,
+        inputQuantity: isIncrement ? absQty : 0,
+        outputQuantity: isIncrement ? 0 : absQty,
+        type: movementType,
+        reason: dto.reason,
+        referenceId: dto.supplierId,
+        referenceType: dto.supplierId
+          ? ReferenceType.SUPPLIER
+          : ReferenceType.MANUAL_ADJUSTMENT,
+        balanceAfter: updatedStock.quantity,
+        createdById: changedBy,
+        tx, // Pass the transaction instance
+      });
+
+      return updatedStock;
     });
-
-    if (!updatedStock) {
-      throw new ConflictException('Concurrency conflict: Stock was modified by another process.');
-    }
-
-    await this.recordMovement({
-      variantId: stock.variantId,
-      inputQuantity: isIncrement ? absQty : 0,
-      outputQuantity: isIncrement ? 0 : absQty,
-      type: movementType,
-      reason: dto.reason,
-      referenceId: dto.supplierId,
-      referenceType: dto.supplierId ? ReferenceType.SUPPLIER : ReferenceType.MANUAL_ADJUSTMENT,
-      balanceAfter: updatedStock.quantity,
-      createdById: changedBy
-    });
-
-    return updatedStock;
   }
 
   async getStockMovements(variantId: string, limit = 50) {
@@ -250,7 +277,25 @@ export class StockService {
     return this.prisma.stockMovement.findMany({
       where: { variantId: stock.variantId },
       orderBy: { createdAt: 'desc' },
-      take: limit
+      take: limit,
+    });
+  }
+
+  async getAllMovements(limit = 50) {
+    return this.prisma.stockMovement.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: {
+        variant: {
+          include: {
+            product: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -264,8 +309,10 @@ export class StockService {
     referenceType?: ReferenceType;
     balanceAfter: number;
     createdById?: string;
+    tx?: Prisma.TransactionClient;
   }) {
-    return this.prisma.stockMovement.create({
+    const prisma = data.tx || this.prisma;
+    return prisma.stockMovement.create({
       data: {
         variantId: data.variantId,
         quantity: data.inputQuantity + data.outputQuantity,
@@ -273,7 +320,7 @@ export class StockService {
         reason: data.reason,
         referenceId: data.referenceId,
         referenceType: data.referenceType,
-        performedBy: data.createdById
+        performedBy: data.createdById,
       },
     });
   }

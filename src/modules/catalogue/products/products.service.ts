@@ -16,13 +16,19 @@ import { generateSlug } from '../../../common/utils/slug.util';
 
 @Injectable()
 export class ProductsService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   async createFull(dto: CreateProductFullDto) {
-    const { variants, images, categoryId, brandId, modelId, dropshipSupplierId, ...rest } = dto;
-    const slug =
-      rest.slug ||
-      generateSlug(rest.name);
+    const {
+      variants,
+      images,
+      categoryId,
+      brandId,
+      modelId,
+      dropshipSupplierId,
+      ...rest
+    } = dto;
+    const slug = rest.slug || generateSlug(rest.name);
 
     // Check slug uniqueness
     const existing = await this.prisma.product.findUnique({ where: { slug } });
@@ -31,7 +37,9 @@ export class ProductsService {
     }
 
     // Check SKU uniqueness
-    const existingSku = await this.prisma.product.findUnique({ where: { sku: rest.sku } });
+    const existingSku = await this.prisma.product.findUnique({
+      where: { sku: rest.sku },
+    });
     if (existingSku) {
       throw new ConflictException('Product SKU already exists');
     }
@@ -46,16 +54,18 @@ export class ProductsService {
           category: { connect: { id: categoryId } },
           brand: brandId ? { connect: { id: brandId } } : undefined,
           model: modelId ? { connect: { id: modelId } } : undefined,
-          dropshipSupplier: dropshipSupplierId ? { connect: { id: dropshipSupplierId } } : undefined,
+          dropshipSupplier: dropshipSupplierId
+            ? { connect: { id: dropshipSupplierId } }
+            : undefined,
           images:
             images && images.length > 0
               ? {
-                create: images.map((url, index) => ({
-                  imageUrl: url,
-                  orderIndex: index,
-                  isPrimary: index === 0,
-                })),
-              }
+                  create: images.map((url, index) => ({
+                    imageUrl: url,
+                    orderIndex: index,
+                    isPrimary: index === 0,
+                  })),
+                }
               : undefined,
         },
       });
@@ -67,15 +77,28 @@ export class ProductsService {
             productId: product.id,
             supplierId: dropshipSupplierId,
             isActive: true,
-          }
+          },
         });
       }
 
       // 3. Create Variants
       if (variants && variants.length > 0) {
         for (const variantDto of variants) {
-          const { prices, images: variantImages, stock, price, compareAtPrice, cost, minStock, maxStock, weight, ...variantData } = variantDto;
-          const variantSku = variantData.sku || `${product.sku}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+          const {
+            prices,
+            images: variantImages,
+            stock,
+            price,
+            compareAtPrice,
+            cost,
+            minStock,
+            maxStock,
+            weight,
+            ...variantData
+          } = variantDto;
+          const variantSku =
+            variantData.sku ||
+            `${product.sku}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
           // Create variant
           const variant = await tx.productVariant.create({
@@ -150,7 +173,9 @@ export class ProductsService {
       ...(categoryId && { categoryId }),
       ...(brandId && { brandId }),
       ...(modelId && { modelId }),
-      ...(isDropshipping !== undefined && { isDropshipping: String(isDropshipping) === 'true' }),
+      ...(isDropshipping !== undefined && {
+        isDropshipping: String(isDropshipping) === 'true',
+      }),
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },
@@ -164,13 +189,13 @@ export class ProductsService {
               some: {
                 amount: {
                   gte: minPrice,
-                  lte: maxPrice
-                }
-              }
-            }
-          }
-        }
-      })
+                  lte: maxPrice,
+                },
+              },
+            },
+          },
+        },
+      }),
     };
 
     const [data, total] = await Promise.all([
@@ -184,7 +209,7 @@ export class ProductsService {
           brand: { select: { id: true, name: true } },
           images: { where: { isPrimary: true }, take: 1 },
           supplierProducts: {
-            include: { supplier: { select: { name: true } } }
+            include: { supplier: { select: { name: true } } },
           },
           variants: {
             include: {
@@ -221,7 +246,7 @@ export class ProductsService {
         model: true,
         dropshipSupplier: true,
         supplierProducts: {
-          include: { supplier: true }
+          include: { supplier: true },
         },
         images: { orderBy: { orderIndex: 'asc' } },
         variants: {
@@ -251,7 +276,7 @@ export class ProductsService {
         model: true,
         dropshipSupplier: true,
         supplierProducts: {
-          include: { supplier: true }
+          include: { supplier: true },
         },
         images: { orderBy: { orderIndex: 'asc' } },
         variants: {
@@ -273,7 +298,126 @@ export class ProductsService {
   }
 
   async update(id: string, dto: UpdateProductDto) {
-    return this.prisma.product.update({ where: { id }, data: dto });
+    const {
+      images,
+      variants,
+      categoryId,
+      brandId,
+      modelId,
+      dropshipSupplierId,
+      ...rest
+    } = dto;
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Update basic info
+      const product = await tx.product.update({
+        where: { id },
+        data: {
+          ...rest,
+          category: categoryId ? { connect: { id: categoryId } } : undefined,
+          brand: brandId ? { connect: { id: brandId } } : undefined,
+          model: modelId ? { connect: { id: modelId } } : undefined,
+          dropshipSupplier: dropshipSupplierId
+            ? { connect: { id: dropshipSupplierId } }
+            : undefined,
+        },
+      });
+
+      // 2. Sync Images if provided
+      if (images) {
+        // Delete all current images
+        await tx.productImage.deleteMany({ where: { productId: id } });
+        // Create new images
+        if (images.length > 0) {
+          await tx.productImage.createMany({
+            data: images.map((url, index) => ({
+              productId: id,
+              imageUrl: url,
+              orderIndex: index,
+              isPrimary: index === 0,
+            })),
+          });
+        }
+      }
+
+      // 3. Sync Variants if provided
+      if (variants) {
+        // For simplicity in this implementation, we'll delete and recreate variants
+        // WARNING: This depends on the requirements. If variant IDs need to be stable,
+        // a more complex diffing logic would be needed.
+        // Also note that deleting variants will delete their prices and stock due to Cascade.
+
+        await tx.productVariant.deleteMany({ where: { productId: id } });
+
+        for (const variantDto of variants) {
+          const {
+            prices,
+            images: variantImages,
+            stock,
+            price,
+            compareAtPrice,
+            cost,
+            minStock,
+            maxStock,
+            weight,
+            ...variantData
+          } = variantDto;
+          const variantSku =
+            variantData.sku ||
+            `${product.sku}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+
+          // Create variant
+          const variant = await tx.productVariant.create({
+            data: {
+              ...variantData,
+              sku: variantSku,
+              productId: product.id,
+            },
+          });
+
+          // Create stock record if stock is provided
+          if (stock !== undefined) {
+            await tx.stock.create({
+              data: {
+                variantId: variant.id,
+                quantity: stock,
+                alertThreshold: minStock || 5, // Map minStock to alertThreshold
+              },
+            });
+          }
+
+          // Create base price from variant price
+          if (price !== undefined) {
+            await tx.price.create({
+              data: {
+                variantId: variant.id,
+                priceType: PriceType.BASE,
+                customerType: CustomerType.B2C,
+                amount: price,
+                currency: 'XAF',
+                minQuantity: 1,
+                isActive: true,
+              },
+            });
+          }
+
+          // Handle additional prices if provided
+          if (prices && prices.length > 0) {
+            await tx.price.createMany({
+              data: prices.map((p) => ({
+                ...p,
+                amount: new Prisma.Decimal(p.amount),
+                priceType: p.priceType as PriceType,
+                customerType: p.customerType as CustomerType,
+                variantId: variant.id,
+              })),
+            });
+          }
+        }
+      }
+
+      return product;
+    });
   }
 
   async remove(id: string) {
@@ -321,8 +465,10 @@ export class ProductsService {
           category: { connect: { id: categoryId } },
           brand: brandId ? { connect: { id: brandId } } : undefined,
           model: modelId ? { connect: { id: modelId } } : undefined,
-          dropshipSupplier: dropshipSupplierId ? { connect: { id: dropshipSupplierId } } : undefined,
-        }
+          dropshipSupplier: dropshipSupplierId
+            ? { connect: { id: dropshipSupplierId } }
+            : undefined,
+        },
       });
 
       // Simplified duplicate: we don't copy variants/images in this logic for brevity/safety
@@ -333,7 +479,10 @@ export class ProductsService {
     });
   }
 
-  private calculateBestPrice(prices: any[], customerType: CustomerType = CustomerType.B2C) {
+  private calculateBestPrice(
+    prices: any[],
+    customerType: CustomerType = CustomerType.B2C,
+  ) {
     const now = new Date();
     const activePrices = prices.filter((p) => {
       const isTypeMatch = p.customerType === customerType;
@@ -348,12 +497,19 @@ export class ProductsService {
     // 1. Unit Price (minQuantity = 1)
     const unitPrices = activePrices.filter((p) => p.minQuantity === 1);
     // Priority: PROMO > (WHOLESALE if B2B else BASE)
-    const promoUnitPrice = unitPrices.find((p) => p.priceType === PriceType.PROMO);
-    const specificUnitPrice = unitPrices.find((p) =>
-      customerType === CustomerType.B2B ? p.priceType === PriceType.WHOLESALE : p.priceType === PriceType.BASE
+    const promoUnitPrice = unitPrices.find(
+      (p) => p.priceType === PriceType.PROMO,
     );
-    const fallbackUnitPrice = unitPrices.find((p) => p.priceType === PriceType.BASE);
-    const selectedUnitPrice = promoUnitPrice || specificUnitPrice || fallbackUnitPrice;
+    const specificUnitPrice = unitPrices.find((p) =>
+      customerType === CustomerType.B2B
+        ? p.priceType === PriceType.WHOLESALE
+        : p.priceType === PriceType.BASE,
+    );
+    const fallbackUnitPrice = unitPrices.find(
+      (p) => p.priceType === PriceType.BASE,
+    );
+    const selectedUnitPrice =
+      promoUnitPrice || specificUnitPrice || fallbackUnitPrice;
 
     // 2. Bulk Price (minQuantity > 1)
     const bulkPrices = activePrices
